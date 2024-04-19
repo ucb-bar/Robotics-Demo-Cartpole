@@ -1,0 +1,4 @@
+numpy
+torch
+cc-serializer
+cc-udp
