@@ -1,14 +1,13 @@
 <?xml version="1.0"?>
 <robot name="physics">
-
-    <link name="slideBar">
+    <link name="slide_bar">
     <visual>
       <geometry>
         <box size="30 0.05 0.05"/>
       </geometry>
       <origin xyz="0 0 0"/>
-      <material name="green">
-        <color rgba="0 0.8 .8 1"/>
+      <material name="slide_bar">
+        <color rgba=".1 .1 .1 1"/>
       </material>
     </visual>
     <inertial>
@@ -23,8 +22,8 @@
         <box size="0.5 0.5 0.2"/>
       </geometry>
       <origin xyz="0 0 0"/>
-      <material name="blue">
-        <color rgba="0 0 .8 1"/>
+      <material name="cart">
+        <color rgba=".3 .3 .3 1"/>
       </material>
     </visual>
     <collision>
@@ -42,7 +41,7 @@
   <joint name="slider_to_cart" type="prismatic">
     <axis xyz="1 0 0"/>
     <origin xyz="0.0 0.0 0.0"/>
-    <parent link="slideBar"/>
+    <parent link="slide_bar"/>
     <child link="cart"/>
     <limit effort="1000.0" lower="-15" upper="15" velocity="5"/>
   </joint>
@@ -53,8 +52,8 @@
         <box size="0.05 0.05 1.0"/>	
       </geometry>
       <origin rpy="0 0 0" xyz="0 0 0.5"/>
-      <material name="white">
-        <color rgba="1 1 1 1"/>
+      <material name="pole">
+        <color rgba="1. 1. 1. 1"/>
       </material>
     </visual>
     <inertial>
