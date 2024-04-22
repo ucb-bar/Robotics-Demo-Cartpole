@@ -9,18 +9,16 @@ import torch
 from cc.udp import UDP
 
 from frostgym.asset import CartPoleAsset
-from frostgym.env import SimulationEnv
+from frostgym.env import BaseIsaacGymConfig, BaseIsaacGymEnvironment
 
 
 
-udp_comm = UDP(recv_addr=("0.0.0.0", 6001), send_addr=("10.0.10.12", 6000))
+cfg = BaseIsaacGymConfig()
+cfg.asset = CartPoleAsset()
 
 
-asset = CartPoleAsset()
+env = BaseIsaacGymEnvironment(cfg)
 
-env = SimulationEnv()
-
-env.loadAsset(asset)
 
 
 # keys: dict_keys(['root_pos', 'root_rot', 'dof_pos', 'root_vel', 'root_ang_vel', 'dof_vel'])
@@ -28,15 +26,15 @@ env.loadAsset(asset)
 frame_idx = 0
 
 
-dof_positions = np.zeros(env.num_dofs)
+dof_positions = torch.zeros(env.num_dofs)
 
 
 while True:
-    # step the physics
-    # env.gym.simulate(env.sim)
-    # env.gym.fetch_results(env.sim, True)
+    print("Frame: ", frame_idx)
 
-    dof_positions[0] = 0.1
+    frame_idx += 1
+    
+    dof_positions[0] = 1
     
     
 

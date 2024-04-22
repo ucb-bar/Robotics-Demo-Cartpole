@@ -10,7 +10,7 @@ env = GymBaseEnvironment("CartPole-v1", render_mode="human")
 agent = PolicyGradientAgent(env.n_obs, env.n_acs)
 
 
-agent.load("cartpole_agent.pt")
+agent.load("checkpoints/cartpole_agent.pt")
 
 # run trained policy
 obs = env.reset()

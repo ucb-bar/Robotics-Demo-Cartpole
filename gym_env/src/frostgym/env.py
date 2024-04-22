@@ -134,85 +134,171 @@ class GymBaseEnvironment:
 
 
 
-class IsaacGymConfig:
-    num_envs            : int   = 1
-    num_obs             : int   = 0
-    num_privileged_obs  : int   = 0
-    num_actions         : int   = 0
+class BaseIsaacGymConfig:
+    num_envs            : int
+    num_obs             : int
+    num_privileged_obs  : int
+    num_actions         : int
 
-    control_decimation  : int   = 1
+    control_decimation  : int
 
-    physics_engine      : gymapi.SimType    = gymapi.SIM_PHYSX
+    asset               : GenericAsset
 
+    physics_engine      : gymapi.SimType
 
+    sim_params          : gymapi.SimParams
 
+    def __init__(self):
+        # number of environments
+        self.num_envs = 1
 
-class IsaacGymBaseEnvironment:
-    def __init__(self, config, compute_device="cuda:0", graphics_device=None):
-        self.config = config
+        self.num_obs = 2
+        self.num_privileged_obs = None
+        self.num_actions = 2
 
-        self.physics_engine: gymapi.SimType = self.config.physics_engine
+        # control decimation
+        self.control_decimation = 1
+
+        # asset
+        self.asset: GenericAsset = None
+
+        # physics engine
+        self.physics_engine = gymapi.SIM_PHYSX
+
+        # simulation parameters
+        self.sim_params = gymapi.SimParams()
+        # Simulation step size
+        self.sim_params.dt = 1.0 / 60.0
+        # 3-Dimension vector representing gravity force in Newtons.
+        self.sim_params.gravity = gymapi.Vec3(0.0, 0.0, -9.81)  # default Z-up
+        self.sim_params.up_axis = gymapi.UpAxis.UP_AXIS_Z
+        self.sim_params.use_gpu_pipeline = False
+
+        if self.physics_engine == gymapi.SIM_FLEX:
+            pass
+        elif self.physics_engine == gymapi.SIM_PHYSX:
+            self.sim_params.physx.solver_type = 1
+            self.sim_params.physx.num_position_iterations = 6
+            self.sim_params.physx.num_velocity_iterations = 0
+            self.sim_params.physx.num_threads = 0
+            self.sim_params.physx.use_gpu = False
+
         
-        # TODO: Add to config
-        self.dt = 1.0 / 60.0
-        self.headless = False
-        self.enable_viewer_sync = True
-
-        self.up_axis: gymapi.UpAxis = gymapi.UpAxis.UP_AXIS_Z
-
-        self.use_gpu_pipeline = False
 
 
-        # determine compute and graphics devices
+
+
+
+class BaseIsaacGymEnvironment:
+    def __init__(self, 
+                 config: BaseIsaacGymConfig,
+                 compute_device="cuda:0",
+                 graphics_device="cpu"):
+        """
+        Initializes the Isaac Gym environment.
+        
+        Args:
+            config (IsaacGymConfig): Configuration object for the Isaac Gym environment.
+            compute_device (str): Device to run the simulation on. Default is "cuda:0".
+            graphics_device (str): Device to run the graphics on. Default is None, which is headless mode.
+        """
+        self.config = config
         self.compute_device = compute_device
         self.graphics_device = graphics_device
-        if self.graphics_device is None:
-            self.graphics_device = self.compute_device
-
-
-        self.compute_device_type, self.compute_device_id = gymutil.parse_device_str(self.compute_device)
-        self.graphics_device_type, self.graphics_device_id = gymutil.parse_device_str(self.graphics_device)
-
-        # env device is GPU only if sim is on GPU and use_gpu_pipeline=True, otherwise returned tensors are copied to CPU by physX.
-        if self.compute_device_type == "cuda" and self.use_gpu_pipeline:
-            self.device = self.sim_device
-        else:
-            self.device = "cpu"
-        
-        # graphics device for rendering, -1 for no rendering
-        if self.headless == True:
-            self.graphics_device_id = -1
-
-
-
-        self.num_envs = self.config.num_envs
-        
+        self.viewer = None
 
 
         # initialize gym
         self.gym = gymapi.acquire_gym()
 
-        # initialize simulation physics and graphics contexts
-        self.sim = self.createSim()
 
-        # add ground plane
-        self.createGroundPlane()
+        # determine compute and graphics devices
+        self.compute_device_type, self.compute_device_id = gymutil.parse_device_str(self.compute_device)
+
+        if self.graphics_device is not None:
+            self.graphics_device_type, self.graphics_device_id = gymutil.parse_device_str(self.graphics_device)
+        else:
+            self.graphics_device_type = "none"
+            self.graphics_device_id = -1
+        
+        # env device is GPU only if sim is on GPU and use_gpu_pipeline=True, otherwise returned tensors are copied to CPU by physX.
+        if self.compute_device_type == "cuda" and self.config.sim_params.use_gpu_pipeline:
+            self.device = self.sim_device
+        else:
+            self.device = "cpu"
+        
+        # copy the common parameters as environment attributes
+        self.dt = self.config.sim_params.dt
+        self.num_envs = self.config.num_envs
+        self.num_obs = self.config.num_obs
+        self.num_privileged_obs = self.config.num_privileged_obs
+        self.num_actions = self.config.num_actions
+
+        # optimization flags for PyTorch JIT
+        torch._C._jit_set_profiling_mode(False)
+        torch._C._jit_set_profiling_executor(False)
+
+
+        # allocate buffers
+        self.obs_buf = torch.zeros(self.num_envs, self.num_obs, device=self.device, dtype=torch.float32)
+        self.reward_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.float32)
+        self.reset_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.int32)
+        self.episode_length_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.int32)
+        self.timeout_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+        if self.num_privileged_obs is not None:
+            self.privileged_obs_buf = torch.zeros(self.num_envs, self.num_privileged_obs, device=self.device, dtype=torch.float32)
+        else:
+            self.privileged_obs_buf = None
+
+
+
+        self.enable_viewer_sync = True
 
 
         # environment handles
         self.envs = []
         self.actors = []
 
+
+        # configure sim
+        self.sim = self.gym.create_sim(self.compute_device_id, self.graphics_device_id, self.config.physics_engine, self.config.sim_params)
+
+        if self.sim is None:
+            print("***[FATAL] Failed to create sim")
+            quit()
+
+        # initialize simulation contexts
+        self.createSim()
+
+        # load asset
+        self.loadAsset()
+
+
         self.gym.prepare_sim(self.sim)
 
-        
+        self.initBuffers()
+
+
         # viewer interface
-        if self.headless:
-            self.viewer = None
-        else:
+        if self.graphics_device is not None:
             self.viewer = self.createViewer()
-            self.gym.subscribe_viewer_keyboard_event(self.viewer, gymapi.KEY_ESCAPE, "QUIT")
-            self.gym.subscribe_viewer_keyboard_event(self.viewer, gymapi.KEY_V, "toggle_viewer_sync")
+        
+
+    
+    def initBuffers(self):
+        # get gym GPU state tensors
+        actor_root_state = self.gym.acquire_actor_root_state_tensor(self.sim)
+        dof_state_tensor = self.gym.acquire_dof_state_tensor(self.sim)
+        net_contact_tensor = self.gym.acquire_net_contact_force_tensor(self.sim)
+        self.gym.refresh_actor_root_state_tensor(self.sim)
+        self.gym.refresh_dof_state_tensor(self.sim)
+        self.gym.refresh_net_contact_force_tensor(self.sim)
+
+        self.root_states = gymtorch.wrap_tensor(actor_root_state)
+        self.dof_state = gymtorch.wrap_tensor(dof_state_tensor)
+        self.dof_pos = self.dof_state.view(self.num_envs, self.num_dofs, 2)[..., 0]
+        self.dof_vel = self.dof_state.view(self.num_envs, self.num_dofs, 2)[..., 1]
+        self.base_quat = self.root_states[:, 3:7]
         
 
     def createViewer(self):
@@ -227,6 +313,10 @@ class IsaacGymBaseEnvironment:
         cam_target = gymapi.Vec3(0, 0, 0.8)
         self.gym.viewer_camera_look_at(viewer, None, cam_pos, cam_target)
 
+        # subscribe to keyboard events
+        self.gym.subscribe_viewer_keyboard_event(self.viewer, gymapi.KEY_ESCAPE, "QUIT")
+        self.gym.subscribe_viewer_keyboard_event(self.viewer, gymapi.KEY_V, "toggle_viewer_sync")
+
         return viewer
     
     def createSim(self):
@@ -236,35 +326,11 @@ class IsaacGymBaseEnvironment:
         Returns:
             gymapi.Sim: Simulation object
         """
-        # configure sim
-        sim_params = gymapi.SimParams()
+        pass
 
-        # Simulation step size
-        sim_params.dt = self.dt
+        # add ground plane
+        self.createGroundPlane()
 
-        # 3-Dimension vector representing gravity force in Newtons.
-        sim_params.gravity = gymapi.Vec3(0.0, 0.0, -9.81)   # default Z-up
-
-        if self.physics_engine == gymapi.SIM_FLEX:
-            sim_params.flex = sim_params.flex
-        elif self.physics_engine == gymapi.SIM_PHYSX:
-            sim_params.physx.solver_type = 1
-            sim_params.physx.num_position_iterations = 6
-            sim_params.physx.num_velocity_iterations = 0
-            # self.sim_params.physx.num_threads = args.num_threads # default 0
-            # self.sim_params.physx.use_gpu = args.use_gpu # default  False
-
-        sim_params.up_axis = self.up_axis
-
-        sim_params.use_gpu_pipeline = self.use_gpu_pipeline
-
-        sim = self.gym.create_sim(self.compute_device_id, self.graphics_device_id, self.physics_engine, sim_params)
-
-        if sim is None:
-            print("***[FATAL] Failed to create sim")
-            quit()
-
-        return sim
 
     def createGroundPlane(self):
         """
@@ -278,40 +344,38 @@ class IsaacGymBaseEnvironment:
         self.gym.add_ground(self.sim, plane_params)
 
 
-    def loadAsset(self, asset: GenericAsset):
+    def loadAsset(self):
+        asset = self.config.asset
         asset_path = os.path.join(asset.root_path, asset.filename)
         print("Loading asset \"%s\"..." % asset_path)
 
-        self.asset_handle = self.gym.load_asset(self.sim, asset.root_path, asset.filename, asset.options)
+        asset_handle = self.gym.load_asset(self.sim, asset.root_path, asset.filename, asset.options)
 
+        num_bodies = self.gym.get_asset_rigid_body_count(asset_handle)
+        num_dofs = self.gym.get_asset_dof_count(asset_handle)
+        dof_props = self.gym.get_asset_dof_properties(asset_handle)
+        rigid_shape_props = self.gym.get_asset_rigid_shape_properties(asset_handle)
 
-        self.num_bodies = self.gym.get_asset_rigid_body_count(self.asset_handle)
-        self.num_dofs = self.gym.get_asset_dof_count(self.asset_handle)
-        dof_props = self.gym.get_asset_dof_properties(self.asset_handle)
-        rigid_shape_props = self.gym.get_asset_rigid_shape_properties(self.asset_handle)
+        self.num_dofs = num_dofs
 
-        body_names = self.gym.get_asset_rigid_body_names(self.asset_handle)
-        self.dof_names = self.gym.get_asset_dof_names(self.asset_handle)
+        body_names = self.gym.get_asset_rigid_body_names(asset_handle)
+        dof_names = self.gym.get_asset_dof_names(asset_handle)
 
-        assert self.num_bodies == len(body_names), "Body name count mismatch"
-        assert self.num_dofs == len(self.dof_names), "DOF name count mismatch"
+        assert num_bodies == len(body_names), "Body name count mismatch"
+        assert num_dofs == len(dof_names), "DOF name count mismatch"
 
-        print(" - Degrees of freedom: %d" % self.num_dofs)
+        print(" - Degrees of freedom: %d" % num_dofs)
 
         self.init_state = InitState(
-            dof_pos=np.zeros(self.num_dofs),
-            dof_vel=np.zeros(self.num_dofs)
+            dof_pos=np.zeros(num_dofs),
+            dof_vel=np.zeros(num_dofs)
         )
 
 
         # set up the env grid
         self.env_spacing = 2.5
 
-
         self._setEnvOrigins()
-
-
-
 
         unbounded_env = False
 
@@ -321,7 +385,6 @@ class IsaacGymBaseEnvironment:
         else:
             env_lower = gymapi.Vec3(-self.env_spacing, -self.env_spacing, 0.0)
             env_upper = gymapi.Vec3(self.env_spacing, self.env_spacing, self.env_spacing)
-
 
 
         print("Creating %d environments" % self.num_envs)
@@ -339,11 +402,11 @@ class IsaacGymBaseEnvironment:
 
             # 1 to disable, 0 to enable...bitwise filter
             self_collisions = 1
-            actor_handle = self.gym.create_actor(env_handle, self.asset_handle, self.pose, asset.name, i, self_collisions, 0)
+            actor_handle = self.gym.create_actor(env_handle, asset_handle, self.pose, asset.name, i, self_collisions, 0)
             self.actors.append(actor_handle)
 
             # set default DOF positions
-            dof_state = np.zeros(self.num_dofs, dtype=gymapi.DofState.dtype)
+            dof_state = np.zeros(num_dofs, dtype=gymapi.DofState.dtype)
             dof_state["pos"] = self.init_state.dof_pos
             dof_state["vel"] = self.init_state.dof_vel
 
@@ -384,10 +447,10 @@ class IsaacGymBaseEnvironment:
 
         self.render()
         
-        for _ in range(self.control_decimation):
+        for _ in range(self.config.control_decimation):
             # torques = self._compute_torques(actions)
             torques = actions
-            self.gym.set_dof_actuation_forces_tensor(self.sim, gymtorch.unwrap_tensor(torques))
+            self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(torques))
             self.gym.simulate(self.sim)
             if self.compute_device == "cpu":
                 self.gym.fetch_results(self.sim, True)
@@ -397,12 +460,16 @@ class IsaacGymBaseEnvironment:
         self.gym.refresh_actor_root_state_tensor(self.sim)
         self.gym.refresh_net_contact_force_tensor(self.sim)
 
+        obs = torch.cat([
+            self.base_quat,
+            self.dof_pos,
+        ], dim=-1)
 
 
 
 
         clip_observations = float("inf")
-        obs = torch.clip(self._get_obs(), -clip_observations, clip_observations)
+        obs = torch.clip(obs, -clip_observations, clip_observations)
 
 
 
@@ -503,10 +570,10 @@ class IsaacGymBaseEnvironment:
         # get array of DOF properties
         dof_states = np.zeros(self.num_dofs, dtype=gymapi.DofState.dtype)
 
-        dof_props = self.gym.get_asset_dof_properties(self.asset_handle)
+        dof_props = self.gym.get_asset_dof_properties(asset_handle)
 
         # get list of DOF types
-        dof_types = [self.gym.get_asset_dof_type(self.asset_handle, i) for i in range(self.num_dofs)]
+        dof_types = [self.gym.get_asset_dof_type(asset_handle, i) for i in range(self.num_dofs)]
 
 
         # get the limit-related slices of the DOF properties array
@@ -525,8 +592,8 @@ class IsaacGymBaseEnvironment:
         for i in range(self.num_dofs):
             if has_limits[i]:
                 if dof_types[i] == gymapi.DOF_ROTATION:
-                    self.lower_limits[i] = clamp(self.lower_limits[i], -math.pi, math.pi)
-                    self.upper_limits[i] = clamp(self.upper_limits[i], -math.pi, math.pi)
+                    self.lower_limits[i] = torch.clip(self.lower_limits[i], -math.pi, math.pi)
+                    self.upper_limits[i] = torch.clip(self.upper_limits[i], -math.pi, math.pi)
                 # make sure our default position is in range
                 if self.lower_limits[i] > 0.0:
                     self.default_dof_pos[i] = self.lower_limits[i]
