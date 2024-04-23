@@ -2,3 +2,5 @@ numpy
 torch
 cc-serializer
 cc-udp
+gym[classic_control]
+tensorboard
