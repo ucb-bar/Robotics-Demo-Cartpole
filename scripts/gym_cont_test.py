@@ -4,11 +4,11 @@ from frostgym.agent import PolicyGradientAgent
 
 
 # prepare environment
-env = GymBaseEnvironment("CartPole-v1", render_mode="human")
+env = GymBaseEnvironment("InvertedPendulum-v4", render_mode="human")
 
 # prepare policy
 agent = PolicyGradientAgent(env.n_obs, env.n_acs)
-agent.load("checkpoints/cartpole_agent.pt")
+agent.load("cartpole_agent.pt")
 
 # run trained policy
 obs = env.reset()

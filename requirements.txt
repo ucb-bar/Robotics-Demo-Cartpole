@@ -3,4 +3,5 @@ torch
 cc-serializer
 cc-udp
 gym[classic_control]
+gym[mujoco]
 tensorboard

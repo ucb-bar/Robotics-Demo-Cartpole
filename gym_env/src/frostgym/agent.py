@@ -9,14 +9,16 @@ class MLP(torch.nn.Module):
     def __init__(self, n_obs, n_acs):
         super(MLP, self).__init__()
 
-        self.fc1 = torch.nn.Linear(n_obs, 32)
-        self.fc2 = torch.nn.Linear(32, 32)
-        self.fc3 = torch.nn.Linear(32, n_acs)
+        self.fc1 = torch.nn.Linear(n_obs, 24)
+        self.fc2 = torch.nn.Linear(24, 24)
+        self.fc3 = torch.nn.Linear(24, n_acs)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
-        x = torch.softmax(self.fc3(x), dim=-1)
+        # x = torch.softmax(self.fc3(x), dim=-1)
+
+        x = self.fc3(x)
 
         return x
 
@@ -30,8 +32,13 @@ class PolicyGradientAgent:
         # create actor model
         self.actor = MLP(n_obs, n_acs)
         
+        # create logstd
+        self.logstd = torch.nn.Parameter(torch.zeros(n_acs))
+        self.parameters = list(self.actor.parameters()) + [self.logstd]
+
         # create optimizer
-        self.optimizer = torch.optim.Adam(self.actor.parameters(), lr=lr)
+        self.optimizer = torch.optim.Adam(self.parameters, lr=lr)
+
     
     def calculateDiscountedReward(self, rewards: Sequence[torch.Tensor]) -> torch.Tensor:
         discounted_rewards = []
@@ -55,7 +62,12 @@ class PolicyGradientAgent:
         return advantages
 
     def updateActor(self, obs: torch.Tensor, acs: torch.Tensor, advantages: torch.Tensor) -> dict:
-        loss = -(torch.distributions.Categorical(self.actor.forward(obs)).log_prob(acs).unsqueeze(dim=1).mean(dim=-1) * advantages).mean()
+
+        # action_prob = torch.distributions.Categorical(self.actor.forward(obs))
+        action_prob = torch.distributions.Normal(loc=self.actor.forward(obs), scale=torch.exp(self.logstd))
+
+        # loss = -(action_prob.log_prob(acs).unsqueeze(dim=1).mean(dim=-1) * advantages).mean()
+        loss = -(action_prob.log_prob(acs).mean(dim=-1) * advantages).mean()
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -85,8 +97,13 @@ class PolicyGradientAgent:
 
     def getAction(self, obs: torch.Tensor) -> torch.Tensor:
         # convert probability to one-hot action
-        action_probs = self.actor.forward(obs)
-        action = action_probs.multinomial(num_samples=1)[0]
+        # action_probs = self.actor.forward(obs)
+        # action = action_probs.multinomial(num_samples=1)[0]
+
+        # action_prob = torch.distributions.Categorical(self.actor.forward(obs))
+        action_prob = torch.distributions.Normal(loc=self.actor.forward(obs), scale=torch.exp(self.logstd))
+
+        action = action_prob.sample()
         return action
 
     def save(self, path: str):

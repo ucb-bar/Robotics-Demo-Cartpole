@@ -37,7 +37,7 @@ class GymBaseEnvironment:
         self.env = gym.make(env_name, render_mode=self.render_mode)
 
         self.n_obs = self.env.observation_space.shape[0]
-        self.n_acs = self.env.action_space.n
+        self.n_acs = self.env.action_space.shape[0]
     
     def reset(self) -> torch.Tensor:
         obs, info = self.env.reset()
