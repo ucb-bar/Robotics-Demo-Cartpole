@@ -4,7 +4,7 @@ import isaacgym
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 
-from frostgym.env import GymBaseEnvironment
+from frostgym.gym_env import GymBaseEnvironment
 from frostgym.agent import PolicyGradientAgent
 
 

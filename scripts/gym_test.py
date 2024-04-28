@@ -1,5 +1,5 @@
 
-from frostgym.env import GymBaseEnvironment
+from frostgym.gym_env import GymBaseEnvironment
 from frostgym.agent import PolicyGradientAgent
 
 
