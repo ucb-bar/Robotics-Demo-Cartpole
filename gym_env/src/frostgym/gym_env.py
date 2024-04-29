@@ -106,35 +106,33 @@ class SanityCheckCartPoleEnvironment(Environment):
         self.n_obs = 4
         self.n_acs = 1
 
-        class Spec:
-            max_episode_steps = 1000
-        self.spec = Spec()
-
         g = 9.8
-        M = 0.5
-        m = 0.2
-        b = 0.1
-        I = 0.006
-        l = 0.3
+        M = 1.0
+        m = 0.1
+        l = 0.5
+        I = m * l**2 # 0.006 -> 0.025
+        print(I)
+        b = 0.
 
         self.dt = 0.02
-        self.t: int
-        self.x: torch.Tensor
+        self.t = 0
+        self.x = torch.tensor([0, 0, 2., 0], dtype=torch.float32)
+
 
         p = I*(M+m)+M*m*l**2
 
         self.A = torch.tensor([
-            [0, 1, 0, 0],
+            [0,               1,               0, 0],
             [0, -(I+m*l**2)*b/p, (m**2*g*l**2)/p, 0],
-            [0, 0, 0, 1],
-            [0, -(m*l*b)/p, m*g*l*(M+m)/p, 0],
+            [0,               0,               0, 1],
+            [0,      -(m*l*b)/p,   m*g*l*(M+m)/p, 0],
         ], dtype=torch.float32)
-    
+
         self.B = torch.tensor([
-            [0],
+            [           0],
             [(I+m*l**2)/p],
-            [0],
-            [m*l/p],
+            [           0],
+            [       m*l/p],
         ], dtype=torch.float32)
 
         self.C = torch.tensor([
@@ -151,14 +149,13 @@ class SanityCheckCartPoleEnvironment(Environment):
             [0],
         ], dtype=torch.float32)
 
-        self.reset()
         
-
     def reset(self) -> torch.Tensor:
         self.t = 0
         self.x = torch.tensor([0, 0, 0.2, 0], dtype=torch.float32)
+        info = {}
 
-        return self.x
+        return self.x, info
 
     def step(self, u: torch.Tensor) -> tuple:
         self.t += 1
@@ -166,13 +163,9 @@ class SanityCheckCartPoleEnvironment(Environment):
         dx_t = self.A @ self.x + self.B @ u
         y_t = self.C @ self.x
 
-        truncated = False
-        if self.t >= 1000:
-            truncated = True
+        truncated = self.t >= 1000
 
-        terminated = False
-        if torch.abs(self.x[0]) > 5 or torch.abs(self.x[2]) > np.radians(15):
-            terminated = True
+        terminated = bool(not torch.isfinite(y_t).all() or (np.abs(y_t[1]) > 1))
 
         self.x += dx_t * self.dt
         return (
@@ -184,9 +177,10 @@ class SanityCheckCartPoleEnvironment(Environment):
         )
 
 
-
-class CartPoleEnvironment(Environment):
+class CartPoleEnvironment(SanityCheckCartPoleEnvironment):
     def __init__(self, render_mode="rgb_array"):
+        super().__init__()
+
         self.render_mode = render_mode
 
         self.env = gym.make("InvertedPendulum-v4", render_mode=self.render_mode)
@@ -197,14 +191,25 @@ class CartPoleEnvironment(Environment):
         self.n_acs = self.env.action_space.shape[0]
     
     def reset(self) -> torch.Tensor:
-        obs, info = self.env.reset(seed=0)
+        obs, info = super().reset()
+        self.env.reset(seed=0)
         return torch.tensor(obs, dtype=torch.float32)
+    
 
     def step(self, acs: torch.Tensor) -> tuple:
-        obs, reward, terminated, truncated, info = self.env.step(acs.to("cpu").detach().numpy())
+        obs, reward, terminated, _, _ = super().step(acs)
+
+        self.env.data.qpos[0] = obs[0]
+        self.env.data.qpos[1] = obs[2]
+        self.env.data.qvel[0] = obs[1]
+        self.env.data.qvel[1] = obs[3]
+
+        ob, _, _, truncated, info = self.env.step(acs.to("cpu").detach().numpy())
+        print(ob, terminated, truncated)
+
         return (
-            torch.tensor(obs, dtype=torch.float32),
-            torch.tensor(reward, dtype=torch.float32),
+            obs,
+            reward,
             terminated,
             truncated,
             info)
