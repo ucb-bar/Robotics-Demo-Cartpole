@@ -1,10 +1,10 @@
 
-from frostgym.gym_env import GymBaseEnvironment
+from frostgym.gym_env import CartPoleEnvironment
 from frostgym.agent import PolicyGradientAgent
 
 
 # prepare environment
-env = GymBaseEnvironment("InvertedPendulum-v4", render_mode="human")
+env = CartPoleEnvironment(render_mode="human")
 
 # prepare policy
 agent = PolicyGradientAgent(env.n_obs, env.n_acs)

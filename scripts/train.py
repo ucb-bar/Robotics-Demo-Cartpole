@@ -4,19 +4,16 @@ import isaacgym
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 
-from frostgym.gym_env import GymBaseEnvironment
+from frostgym.gym_env import CartPoleEnvironment, SanityCheckCartPoleEnvironment
 from frostgym.agent import PolicyGradientAgent
 
 
-
-
-
 # prepare environment
-env = GymBaseEnvironment("InvertedPendulum-v4")
+# env = CartPoleEnvironment()
+env = SanityCheckCartPoleEnvironment()
 
 # prepare policy
 agent = PolicyGradientAgent(env.n_obs, env.n_acs)
-
 
 log_dir = "logs/cartpole_{}".format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
 writer = SummaryWriter(log_dir)
@@ -26,13 +23,13 @@ writer = SummaryWriter(log_dir)
 n_epochs = 100
 total_env_steps = 0
 
-train_batch_size = 5000
+train_batch_size = 1000
 eval_batch_size = 400
-max_episode_length = env.env.spec.max_episode_steps
+max_episode_length = env.spec.max_episode_steps
 
 log_freq = 10
 
-for epoch in range(n_epochs):
+for epoch in range(n_epochs+1):
     print("******** EPOCH {} ********".format(epoch))
     trajectories, n_env_steps = env.sampleTrajectories(agent, min_timesteps_per_batch=train_batch_size, max_path_length=max_episode_length)
     total_env_steps += n_env_steps

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Visualize Cart Pole</title>
+</head>
+<body>
+  <canvas id="canvas">
+
+  </canvas>
+  <script>
+
+    var cvs, ctx;
+
+    var g = 9.81;
+    var M = 1.;
+    var m = 1.0;
+    var l = 1.0;
+
+    var x = [0, 0, 0.001, 0];
+    var u = 0;
+
+    // var A = [
+    //   [0, 1, 0, 0],
+    //   [0, 0, -m*g/M, 0],
+    //   [0, 0, 0, 1],
+    //   [0, 0, (M+m)*g/(M*l), 0]
+    // ];
+    
+    // var B = [
+    //   [0],
+    //   [1/M],
+    //   [0],
+    //   [-1/(M*l)],
+    // ];
+
+    // var C = [
+    //   [1, 0, 0, 0],
+    //   [0, 1, 0, 0],
+    //   [0, 0, 1, 0],
+    //   [0, 0, 0, 1]
+    // ];
+
+    var A = [
+      [0, 1, 0, 0],
+      [0, -0.1818, 2.6727, 0],
+      [0, 0, 0, 1],
+      [0, -0.4545, 31.1818, 0]
+    ];
+    
+    var B = [
+      [0],
+      [1.8182],
+      [0],
+      [4.5455],
+    ];
+
+    var C = [
+      [1, 0, 0, 0],
+      [0, 1, 0, 0],
+      [0, 0, 1, 0],
+      [0, 0, 0, 1]
+    ];
+
+    var K = [
+      [-70.7107],
+      [-37.8345],
+      [105.5298],
+      [20.9238],
+    ]
+
+    const x_offset = 500;
+    const cart_size = 50;
+    const rail_y = 200;
+    const rail_length = 500;
+
+    var last_t = 0;
+
+    var update = function(t) {
+      var dt = 0.001;
+
+      ctx.clearRect(0, 0, cvs.width, cvs.height);
+
+      var cart_x = x[0];
+      var cart_v = x[1];
+      var pole_theta = x[2];
+      var pole_omega = x[3];
+
+      var pole_x = cart_x + l*Math.sin(pole_theta);
+      var pole_y = l*Math.cos(pole_theta);
+
+
+      // draw rail
+      ctx.fillStyle = "black";
+      ctx.fillRect(x_offset - rail_length/2, rail_y - 2, rail_length, 4);
+
+      // draw cart
+      ctx.fillStyle = "black";
+      ctx.fillRect(x_offset + cart_x*100 - cart_size/2, rail_y - cart_size/2, cart_size, cart_size);
+      
+      // draw pole
+      ctx.beginPath();
+      ctx.moveTo(x_offset + cart_x*100, rail_y - cart_size/2);
+      ctx.lineTo(x_offset + pole_x*100, rail_y - cart_size/2 - pole_y*100);
+      ctx.stroke();
+
+      // draw circle
+      ctx.beginPath();
+      ctx.arc(x_offset + pole_x*100, rail_y - cart_size/2 - pole_y*100, 10, 0, 2*Math.PI);
+      ctx.stroke();
+
+
+
+      // update input, u = -Kx
+      u = 0;
+      for (var i = 0; i < 4; i++) {
+        u += K[i]*x[i];
+      }
+
+
+
+      console.log(u);
+
+      var x_dot = [0, 0, 0, 0];
+
+      for (var i = 0; i < 4; i++) {
+        for (var j = 0; j < 4; j++) {
+          x_dot[i] += A[i][j]*x[j];
+        }
+        x_dot[i] += B[i]*u;
+      }
+
+      for (var i = 0; i < 4; i++) {
+        x[i] += x_dot[i]*dt;
+      }
+
+
+      requestAnimationFrame(update);
+    }
+    
+    window.onload = function() {
+      cvs = document.getElementById("canvas");
+
+      cvs.height = 1000;
+      cvs.width = 1000;
+
+      ctx = cvs.getContext("2d");
+      
+
+      update();
+
+
+    }
+
+  </script>
+</body>

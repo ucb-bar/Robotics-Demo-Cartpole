@@ -1,14 +1,12 @@
-from typing import Sequence
+from typing import Sequence, List
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
 
-
 class MLP(torch.nn.Module):
     def __init__(self, n_obs, n_acs):
         super(MLP, self).__init__()
-
         self.fc1 = torch.nn.Linear(n_obs, 24)
         self.fc2 = torch.nn.Linear(24, 24)
         self.fc3 = torch.nn.Linear(24, n_acs)
@@ -23,15 +21,29 @@ class MLP(torch.nn.Module):
         return x
 
 
+class M1P1LinearModule(torch.nn.Module):
+    """
+    Implements the policy function F(Y_(t)) = K * Y_t.
+    """
+    def __init__(self, n_obs, n_acs):
+        super().__init__()
+        self.K: torch.nn.Parameter = torch.nn.Parameter(data=torch.zeros(size=(n_obs, n_acs)), requires_grad=True)
+
+    def forward(self, y_t: torch.Tensor) -> torch.Tensor:
+        u_t: torch.Tensor = y_t @ self.K
+        return u_t
+
+
 
 class PolicyGradientAgent:
-    def __init__(self, n_obs, n_acs, lr=0.01, gamma=0.99):
+    def __init__(self, n_obs: int, n_acs: int, lr: float = 0.01, gamma: float = 0.99):
         self.lr = lr
         self.gamma = gamma
 
         # create actor model
-        self.actor = MLP(n_obs, n_acs)
-        
+        # self.actor = MLP(n_obs, n_acs)
+        self.actor = M1P1LinearModule(n_obs, n_acs)
+
         # create logstd
         self.logstd = torch.nn.Parameter(torch.zeros(n_acs))
         self.parameters = list(self.actor.parameters()) + [self.logstd]
@@ -62,7 +74,6 @@ class PolicyGradientAgent:
         return advantages
 
     def updateActor(self, obs: torch.Tensor, acs: torch.Tensor, advantages: torch.Tensor) -> dict:
-
         # action_prob = torch.distributions.Categorical(self.actor.forward(obs))
         action_prob = torch.distributions.Normal(loc=self.actor.forward(obs), scale=torch.exp(self.logstd))
 
