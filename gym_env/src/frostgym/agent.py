@@ -114,10 +114,10 @@ class PolicyGradientAgent:
         self.gamma = gamma
 
         # create actor model
-        # self.actor = M1P1LinearModule(n_obs, n_acs)
+        self.actor = M1P1LinearModule(n_obs, n_acs)
         # self.actor = AffineM2P1LinearModule(n_obs, n_acs)
         # self.actor = AffineM2P2LinearModule(n_obs, n_acs)
-        self.actor = MLP(n_obs, n_acs)
+        # self.actor = MLP(n_obs, n_acs)
         # self.actor = TransformerNet(n_obs, n_acs)
 
         # create logstd

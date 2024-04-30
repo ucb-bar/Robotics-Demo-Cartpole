@@ -31,7 +31,7 @@ class Environment:
         rewards_traj = []
         terminated_traj = []
 
-        obs = self.reset()
+        obs, _ = self.reset()
 
         rollout_done = False
         steps = 0
