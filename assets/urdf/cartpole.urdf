@@ -1,79 +1,28 @@
-<?xml version="1.0"?>
-<robot name="physics">
-    <link name="slide_bar">
-    <visual>
-      <geometry>
-        <box size="30 0.05 0.05"/>
-      </geometry>
-      <origin xyz="0 0 0"/>
-      <material name="slide_bar">
-        <color rgba=".1 .1 .1 1"/>
-      </material>
-    </visual>
-    <inertial>
-      <mass value="0"/>
-      <inertia ixx="1.0" ixy="0.0" ixz="0.0" iyy="1.0" iyz="0.0" izz="1.0"/>
-    </inertial>
-  </link>
-
-  <link name="cart">
-    <visual>
-      <geometry>
-        <box size="0.5 0.5 0.2"/>
-      </geometry>
-      <origin xyz="0 0 0"/>
-      <material name="cart">
-        <color rgba=".3 .3 .3 1"/>
-      </material>
-    </visual>
-    <collision>
-      <geometry>
-          <box size="0.5 0.5 0.2"/>
-      </geometry>
-      <origin xyz="0 0 0"/>
-    </collision>
-    <inertial>
-      <mass value="1"/>
-      <inertia ixx="1.0" ixy="0.0" ixz="0.0" iyy="1.0" iyz="0.0" izz="1.0"/>
-    </inertial>
-  </link>
-
-  <joint name="slider_to_cart" type="prismatic">
-    <axis xyz="1 0 0"/>
-    <origin xyz="0.0 0.0 0.0"/>
-    <parent link="slide_bar"/>
-    <child link="cart"/>
-    <limit effort="1000.0" lower="-15" upper="15" velocity="5"/>
-  </joint>
-
-  <link name="pole">
-    <visual>
-      <geometry>
-        <box size="0.05 0.05 1.0"/>	
-      </geometry>
-      <origin rpy="0 0 0" xyz="0 0 0.5"/>
-      <material name="pole">
-        <color rgba="1. 1. 1. 1"/>
-      </material>
-    </visual>
-    <inertial>
-    <origin xyz="0 0 0.5"/>
-      <mass value="10"/>
-      <inertia ixx="1.0" ixy="0.0" ixz="0.0" iyy="1.0" iyz="0.0" izz="1.0"/>
-    </inertial>
-     <collision>
-      <geometry>
-        <box size="0.05 0.05 1.0"/>	
-      </geometry>
-      <origin rpy="0 0 0" xyz="0 0 0.5"/>
-    </collision>
-  </link>
-
-  <joint name="cart_to_pole" type="continuous">
-    <axis xyz="0 1 0"/>
-    <origin xyz="0.0 0.0 0"/>
-    <parent link="cart"/>
-    <child link="pole"/>
-  </joint>
-  
-</robot>
+<mujoco model="inverted pendulum">
+	<compiler inertiafromgeom="true"/>
+	<default>
+		<joint armature="0" damping="1" limited="true"/>
+		<geom contype="0" friction="1 0.1 0.1" rgba="0.7 0.7 0 1"/>
+		<tendon/>
+		<motor ctrlrange="-3 3"/>
+	</default>
+	<option gravity="0 0 -9.8" integrator="RK4" timestep="0.02"/>
+	<size nstack="3000"/>
+	<worldbody>
+		<!--geom name="ground" type="plane" pos="0 0 0" /-->
+		<geom name="rail" pos="0 0 0" quat="0.707 0 0.707 0" rgba="0.1 0.1 0.1 1" size="0.02 1" type="capsule"/>
+		<body name="cart" pos="0 0 0">
+			<joint axis="1 0 0" limited="true" name="slider" pos="0 0 0" range="-1 1" type="slide"/>
+			<geom name="cart" pos="0 0 0" quat="0.707 0 0.707 0" rgba="0.5 0.5 0.55 1" size="0.03 0.03 0.06" type="box" mass="0.5"/>
+			<body name="pole" pos="0 0 0">
+				<joint axis="0 1 0" name="hinge" pos="0 0 0" range="-90 90" type="hinge"/>
+				<geom fromto="0 0 0 0.001 0 0.3" name="cpole" rgba="0.8 0.8 0.8 1" size="0.01" type="capsule" mass="0.001"/>
+				<geom pos="0 0 0.3" name="pole" rgba="1 1 1 1" size="0.04" type="sphere" mass="0.2"/>
+				<!--                 <body name="pole2" pos="0.001 0 0.6"><joint name="hinge2" type="hinge" pos="0 0 0" axis="0 1 0"/><geom name="cpole2" type="capsule" fromto="0 0 0 0 0 0.6" size="0.05 0.3" rgba="0.7 0 0.7 1"/><site name="tip2" pos="0 0 .6"/></body>-->
+			</body>
+		</body>
+	</worldbody>
+	<actuator>
+		<motor ctrllimited="true" ctrlrange="-3 3" gear="100" joint="slider" name="slide"/>
+	</actuator>
+</mujoco>

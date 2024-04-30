@@ -5,7 +5,7 @@ import numpy as np
 import gym
 import torch
 
-from .agent import PolicyGradientAgent
+from .agent import PolicyGradientAgent, AffineM2P1LinearModule, AffineM2P2LinearModule
 
 
 class Environment:
@@ -35,6 +35,10 @@ class Environment:
 
         rollout_done = False
         steps = 0
+
+        if type(policy.actor) == AffineM2P1LinearModule or type(policy.actor) == AffineM2P2LinearModule:
+            policy.actor.t = 0
+
         while not rollout_done:
             obs_batch = obs.unsqueeze(dim=0)
             acs_batch = policy.getAction(obs_batch)
@@ -102,21 +106,32 @@ class Environment:
 
 
 class SanityCheckCartPoleEnvironment(Environment):
-    def __init__(self):
+    def __init__(self, alpha: float = .0, beta: float = .0, gamma: float = .0, sigma: float = .02):
         self.n_obs = 4
         self.n_acs = 1
 
-        g = 9.8
-        M = 1.0
-        m = 0.1
-        l = 0.5
-        I = m * l**2 # 0.006 -> 0.025
-        print(I)
-        b = 0.
+        self.alpha = alpha
+        self.beta = beta
+        self.gamma = gamma
+        self.sigma = sigma
 
         self.dt = 0.02
-        self.t = 0
-        self.x = torch.tensor([0, 0, 2., 0], dtype=torch.float32)
+
+
+        g = 9.8
+        M = 0.5
+        m = 0.2
+        l = 0.3
+        I = m * l**2 # 0.006 -> 0.018
+        b = 0.1
+
+
+
+        self.steps = 0
+        self.x: torch.Tensor = (
+            torch.zeros(self.n_obs, dtype=torch.float32)
+              + self.sigma * torch.randn(self.n_obs, dtype=torch.float32)
+              )
 
 
         p = I*(M+m)+M*m*l**2
@@ -151,26 +166,41 @@ class SanityCheckCartPoleEnvironment(Environment):
 
         
     def reset(self) -> torch.Tensor:
-        self.t = 0
-        self.x = torch.tensor([0, 0, 0.2, 0], dtype=torch.float32)
+        self.steps = 0
+        self.x: torch.Tensor = (
+            torch.zeros(self.n_obs, dtype=torch.float32)
+              + self.sigma * torch.randn(self.n_obs, dtype=torch.float32)
+              )
+
+        C_t = self.C + self.gamma * torch.randn(size=())
+        y_t = C_t @ self.x
         info = {}
 
-        return self.x, info
+        return y_t, info
 
     def step(self, u: torch.Tensor) -> tuple:
-        self.t += 1
-        
-        dx_t = self.A @ self.x + self.B @ u
-        y_t = self.C @ self.x
+        self.steps += 1
+        reward = torch.tensor(1., dtype=torch.float32)
 
-        truncated = self.t >= 1000
+        A_t = self.A + self.alpha * torch.randn(size=())
+        B_t = self.B + self.beta * torch.randn(size=())
+        C_t = self.C + self.gamma * torch.randn(size=())
+        D_t = self.D
+
+        # clip action
+        u = torch.clamp(u, -3, 3)
+        
+        dx_t = A_t @ self.x + B_t @ u
+        y_t = C_t @ self.x
+
+        truncated = self.steps >= 2000
 
         terminated = bool(not torch.isfinite(y_t).all() or (np.abs(y_t[1]) > 1))
 
         self.x += dx_t * self.dt
         return (
             y_t,
-            torch.tensor(self.t, dtype=torch.float32),
+            reward,
             terminated,
             truncated,
             {}
@@ -178,8 +208,8 @@ class SanityCheckCartPoleEnvironment(Environment):
 
 
 class CartPoleEnvironment(SanityCheckCartPoleEnvironment):
-    def __init__(self, render_mode="rgb_array"):
-        super().__init__()
+    def __init__(self, alpha: float = .0, beta: float = .0, gamma: float = .0, sigma: float = .02, render_mode="rgb_array"):
+        super().__init__(alpha, beta, gamma, sigma)
 
         self.render_mode = render_mode
 
@@ -199,13 +229,14 @@ class CartPoleEnvironment(SanityCheckCartPoleEnvironment):
     def step(self, acs: torch.Tensor) -> tuple:
         obs, reward, terminated, _, _ = super().step(acs)
 
-        self.env.data.qpos[0] = obs[0]
+        self.env.data.qpos[0] = -obs[0]
         self.env.data.qpos[1] = obs[2]
-        self.env.data.qvel[0] = obs[1]
+        self.env.data.qvel[0] = -obs[1]
         self.env.data.qvel[1] = obs[3]
 
-        ob, _, _, truncated, info = self.env.step(acs.to("cpu").detach().numpy())
-        print(ob, terminated, truncated)
+        _, _, _, truncated, info = self.env.step(acs.to("cpu").detach().numpy())
+        
+        reward = torch.tensor(reward, dtype=torch.float32)
 
         return (
             obs,

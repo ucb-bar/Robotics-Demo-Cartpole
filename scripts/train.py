@@ -1,3 +1,4 @@
+import os
 import datetime
 
 import isaacgym
@@ -7,27 +8,28 @@ from torch.utils.tensorboard import SummaryWriter
 from frostgym.gym_env import CartPoleEnvironment, SanityCheckCartPoleEnvironment
 from frostgym.agent import PolicyGradientAgent
 
+from params import *
+
 
 # prepare environment
-# env = CartPoleEnvironment()
-env = SanityCheckCartPoleEnvironment()
+env = CartPoleEnvironment(alpha, beta, gamma, sigma)
 
 # prepare policy
-agent = PolicyGradientAgent(env.n_obs, env.n_acs)
+agent = PolicyGradientAgent(env.n_obs, env.n_acs, lr=lr)
 
-log_dir = "logs/cartpole_{}".format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+
+exp_name = "{}_alp{}_bet{}_gam{}_sig{}".format(
+    agent.actor.__class__.__name__,
+    alpha,
+    beta,
+    gamma,
+    sigma
+)
+log_dir = "logs/{}_{}".format(exp_name, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+
 writer = SummaryWriter(log_dir)
 
 
-
-n_epochs = 100
-total_env_steps = 0
-
-train_batch_size = 1000
-eval_batch_size = 400
-max_episode_length = env.spec.max_episode_steps
-
-log_freq = 10
 
 for epoch in range(n_epochs+1):
     print("******** EPOCH {} ********".format(epoch))
@@ -76,4 +78,4 @@ for epoch in range(n_epochs+1):
 
 env.close()
 
-agent.save("cartpole_agent.pt")
+agent.save(os.path.join(log_dir, checkpoint_name))
